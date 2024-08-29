@@ -18,6 +18,7 @@ package org.apache.nifi.processors.aws.s3;
 
 import com.amazonaws.AmazonClientException;
 import com.amazonaws.services.s3.AmazonS3Client;
+import com.amazonaws.services.s3.model.AmazonS3Exception;
 import com.amazonaws.services.s3.model.GetObjectMetadataRequest;
 import com.amazonaws.services.s3.model.GetObjectRequest;
 import com.amazonaws.services.s3.model.ObjectMetadata;
@@ -255,6 +256,16 @@ public class FetchS3Object extends AbstractS3Processor {
             if (metadata.getVersionId() != null) {
                 attributes.put("s3.version", metadata.getVersionId());
             }
+        } catch (AmazonS3Exception e) {
+            if (e.getStatusCode() == 400 && e.getErrorCode().equals("ExpiredToken")) {
+                getLogger().info("Calling for an AWS Credential Refresh");
+                refreshAWSCredentials(context, e, session);
+            }
+            flowFile = extractExceptionDetails(e, session, flowFile);
+            getLogger().error("Failed to retrieve S3 Object for {}; routing to failure", flowFile, e);
+            flowFile = session.penalize(flowFile);
+            session.transfer(flowFile, REL_FAILURE);
+            return;
         } catch (final IOException | AmazonClientException ioe) {
             flowFile = extractExceptionDetails(ioe, session, flowFile);
             getLogger().error("Failed to retrieve S3 Object for {}; routing to failure", flowFile, ioe);

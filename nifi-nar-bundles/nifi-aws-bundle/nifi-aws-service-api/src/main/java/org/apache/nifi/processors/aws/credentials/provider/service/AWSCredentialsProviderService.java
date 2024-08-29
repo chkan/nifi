@@ -41,4 +41,8 @@ public interface AWSCredentialsProviderService extends ControllerService {
      * @see  <a href="http://docs.aws.amazon.com/AWSJavaSDK/latest/javadoc/com/amazonaws/auth/AWSCredentialsProvider.html">AWSCredentialsProvider</a>
      */
     AWSCredentialsProvider getCredentialsProvider() throws ProcessException;
+
+    public void refreshCredentials() throws ProcessException;
+    public boolean isTokenExpiringSoon(long secondsThreshold);
+    public String getSessionToken();
 }

@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit;
 
 import com.amazonaws.AmazonServiceException;
 import com.amazonaws.services.s3.AmazonS3Client;
+import com.amazonaws.services.s3.model.AmazonS3Exception;
 import com.amazonaws.services.s3.model.DeleteObjectRequest;
 import com.amazonaws.services.s3.model.DeleteVersionRequest;
 
@@ -99,6 +100,15 @@ public class DeleteS3Object extends AbstractS3Processor {
                 final DeleteVersionRequest r = new DeleteVersionRequest(bucket, key, versionId);
                 s3.deleteVersion(r);
             }
+        } catch (AmazonS3Exception e) {
+            if (e.getStatusCode() == 400 && e.getErrorCode().equals("ExpiredToken")) {
+                getLogger().info("Calling for an AWS Credential Refresh");
+                refreshAWSCredentials(context, e, session);
+            }
+            getLogger().error("Failed to delete S3 Object for {}; routing to failure", flowFile, e);
+            flowFile = session.penalize(flowFile);
+            session.transfer(flowFile, REL_FAILURE);
+            return;
         } catch (final AmazonServiceException ase) {
             flowFile = extractExceptionDetails(ase, session, flowFile);
             getLogger().error("Failed to delete S3 Object for {}; routing to failure", flowFile, ase);

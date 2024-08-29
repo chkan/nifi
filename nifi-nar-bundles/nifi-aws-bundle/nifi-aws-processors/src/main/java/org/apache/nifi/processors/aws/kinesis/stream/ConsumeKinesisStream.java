@@ -16,6 +16,8 @@
  */
 package org.apache.nifi.processors.aws.kinesis.stream;
 
+import com.amazonaws.auth.AWSCredentials;
+import com.amazonaws.auth.BasicSessionCredentials;
 import com.amazonaws.services.kinesis.clientlibrary.interfaces.v2.IRecordProcessorFactory;
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream;
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.KinesisClientLibConfiguration;
@@ -53,6 +55,7 @@ import org.apache.nifi.processor.Relationship;
 import org.apache.nifi.processor.exception.ProcessException;
 import org.apache.nifi.processor.util.StandardValidators;
 import org.apache.nifi.processors.aws.AbstractAWSCredentialsProviderProcessor;
+import org.apache.nifi.processors.aws.credentials.provider.service.AWSCredentialsProviderService;
 import org.apache.nifi.processors.aws.kinesis.stream.record.AbstractKinesisRecordProcessor;
 import org.apache.nifi.processors.aws.kinesis.stream.record.KinesisRecordProcessorRaw;
 import org.apache.nifi.processors.aws.kinesis.stream.record.KinesisRecordProcessorRecord;
@@ -336,6 +339,8 @@ public class ConsumeKinesisStream extends AbstractKinesisStreamProcessor {
     final AtomicReference<WorkerStateChangeListener.WorkerState> workerState = new AtomicReference<>(null);
     private final AtomicBoolean stopped = new AtomicBoolean(false);
 
+    AtomicReference<AWSCredentials> localCreds = new AtomicReference<>(null);
+
     @Override
     protected List<PropertyDescriptor> getSupportedPropertyDescriptors() {
         return PROPERTY_DESCRIPTORS;
@@ -479,6 +484,7 @@ public class ConsumeKinesisStream extends AbstractKinesisStreamProcessor {
         super.onScheduled(context);
     }
 
+    //TODO: extract common code into methods
     @Override
     public void onTrigger(final ProcessContext context, final ProcessSessionFactory sessionFactory) {
         if (worker == null) {
@@ -486,6 +492,24 @@ public class ConsumeKinesisStream extends AbstractKinesisStreamProcessor {
                 if (worker == null) {
                     final String workerId = generateWorkerId();
                     getLogger().info("Starting Kinesis Worker {}", workerId);
+
+                    AWSCredentialsProviderService dynamicCredentialsProviderControllerService = context.getProperty(AbstractAWSCredentialsProviderProcessor.AWS_CREDENTIALS_PROVIDER_SERVICE).asControllerService(AWSCredentialsProviderService.class);
+                    if (dynamicCredentialsProviderControllerService != null && dynamicCredentialsProviderControllerService.toString().matches("^AWSSTSDynamicCredentialsProviderControllerService.*")) {
+
+                        // Current Credentials vs Actual ones in Service check
+                        if (localCreds.get() instanceof BasicSessionCredentials) {
+                            BasicSessionCredentials localCredsSession = (BasicSessionCredentials) localCreds.get();
+                            if (!localCredsSession.getSessionToken().equals(dynamicCredentialsProviderControllerService.getSessionToken())) {
+                                getLogger().info("Credentials were refreshed outside of this processor, recreating client and stopping consumer thread");
+                                this.client = createClient(context);
+                            } else {
+                                getLogger().debug("Credentials matching between local and service");
+                            }
+                        } else {
+                            getLogger().debug("localcreds not BasicSessionCredentials " + localCreds.getClass().toString());
+                        }
+                    }
+
                     // create worker (WorkerState will be CREATED)
                     worker = prepareWorker(context, sessionFactory, workerId);
                     // initialise and start Worker (will set WorkerState to INITIALIZING and attempt to start)
@@ -496,6 +520,34 @@ public class ConsumeKinesisStream extends AbstractKinesisStreamProcessor {
             // after a Worker is registered successfully, nothing has to be done at onTrigger
             // new sessions are created when new messages are consumed by the Worker
             // and if the WorkerState is unexpectedly SHUT_DOWN, then we don't want to immediately re-enter onTrigger
+
+            AWSCredentialsProviderService dynamicCredentialsProviderControllerService = (AWSCredentialsProviderService) context.getProperty(AbstractAWSCredentialsProviderProcessor.AWS_CREDENTIALS_PROVIDER_SERVICE).asControllerService(AWSCredentialsProviderService.class);
+
+            if (dynamicCredentialsProviderControllerService != null && dynamicCredentialsProviderControllerService.toString().matches("^AWSSTSDynamicCredentialsProviderControllerService.*")) {
+                // Are credentials about to expire ?
+                if (dynamicCredentialsProviderControllerService.isTokenExpiringSoon(90)) {
+                    getLogger().info("We are close to Token expiry, triggering AWS Credentials refresh");
+                    dynamicCredentialsProviderControllerService.refreshCredentials();
+                    this.client = createClient(context);
+                    getLogger().info("Stopping consumer thread and recreating");
+                    stopConsuming(context);
+                }
+
+                // Current Credentials vs Actual ones in Service check
+                if (this.localCreds.get() instanceof BasicSessionCredentials) {
+                    BasicSessionCredentials localCredsSession = (BasicSessionCredentials) localCreds.get();
+                    if (!localCredsSession.getSessionToken().equals(dynamicCredentialsProviderControllerService.getSessionToken())) {
+                        getLogger().info("Credentials were refreshed outside of this processor, recreating client and stopping consumer thread");
+                        this.client = createClient(context);
+                        stopConsuming(context);
+                    }
+                } else {
+                    getLogger().debug("localcreds not BasicSessionCredentials " + localCreds.getClass().toString());
+                }
+            } else {
+                getLogger().debug("AWSCredentialsProviderService onTrigger check failed...");
+            }
+
             context.yield();
 
             if (!stopped.get() && WorkerStateChangeListener.WorkerState.SHUT_DOWN == workerState.get()) {
@@ -605,6 +657,8 @@ public class ConsumeKinesisStream extends AbstractKinesisStreamProcessor {
                 throw new ProcessException(String.format("Unable to set Kinesis Client Library Configuration property %s with value %s", StringUtils.capitalize(name), value), e);
             }
         });
+
+        this.localCreds = new AtomicReference<>(getCredentialsProvider(context).getCredentials());
 
         return kinesisClientLibConfiguration;
     }

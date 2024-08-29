@@ -842,6 +842,14 @@ public class PutS3Object extends AbstractS3Processor {
                 getLogger().info("Error trying to delete key {} from cache: {}",
                         new Object[]{cacheKey, e.getMessage()});
             }
+        } catch (AmazonS3Exception e) {
+            if (e.getStatusCode() == 400 && e.getErrorCode().equals("ExpiredToken")) {
+                getLogger().info("Calling for an AWS Credential Refresh");
+                refreshAWSCredentials(context, e, session);
+            }
+            getLogger().error("Failed to put {} to Amazon S3 due to {}", new Object[]{flowFile, e});
+            flowFile = session.penalize(flowFile);
+            session.transfer(flowFile, REL_FAILURE);
         } catch (final ProcessException | AmazonClientException pe) {
             extractExceptionDetails(pe, session, flowFile);
             if (pe.getMessage().contains(S3_PROCESS_UNSCHEDULED_MESSAGE)) {

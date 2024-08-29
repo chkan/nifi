@@ -19,6 +19,7 @@ package org.apache.nifi.processors.aws.s3;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.internal.Constants;
+import com.amazonaws.services.s3.model.AmazonS3Exception;
 import com.amazonaws.services.s3.model.GetObjectMetadataRequest;
 import com.amazonaws.services.s3.model.GetObjectTaggingRequest;
 import com.amazonaws.services.s3.model.GetObjectTaggingResult;
@@ -93,6 +94,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -313,6 +315,9 @@ public class ListS3 extends AbstractS3Processor implements VerifiableProcessor {
     private volatile boolean resetEntityTrackingState = false;
     private volatile ListedEntityTracker<ListableEntityWrapper<S3VersionSummary>> listedEntityTracker;
 
+    private AtomicInteger refreshRetryCount = new AtomicInteger(0);
+    private static final int MAX_REFRESH_RETRIES = 3;
+
     @OnPrimaryNodeStateChange
     public void onPrimaryNodeChange(final PrimaryNodeState newState) {
         justElectedPrimaryNode = (newState == PrimaryNodeState.ELECTED_PRIMARY_NODE);
@@ -419,7 +424,7 @@ public class ListS3 extends AbstractS3Processor implements VerifiableProcessor {
     }
 
     @Override
-    public void onTrigger(final ProcessContext context, final ProcessSession session) {
+    public void onTrigger(final ProcessContext context, final ProcessSession session) throws ProcessException {
         final String listingStrategy = context.getProperty(LISTING_STRATEGY).getValue();
 
         if (BY_TIMESTAMPS.equals(listingStrategy)) {
@@ -517,7 +522,39 @@ public class ListS3 extends AbstractS3Processor implements VerifiableProcessor {
             } while (bucketLister.isTruncated());
 
             writer.finishListing();
-        } catch (final Exception e) {
+            refreshRetryCount.set(0);
+        }
+        catch (AmazonS3Exception e) {
+            if (e.getStatusCode() == 400 && e.getErrorCode().equals("ExpiredToken")) {
+                if (refreshRetryCount.get() < MAX_REFRESH_RETRIES) {
+                    refreshRetryCount.incrementAndGet();
+                    getLogger().info("Retrying to refresh AWS Credentials");
+                    refreshAWSCredentials(context, e, session);
+                    // Sleep for 5 seconds before, next retry
+                    try {
+                        Thread.sleep(5000);
+                    } catch (InterruptedException ex) {
+                        throw new RuntimeException(ex);
+                    }
+                    listByTrackingTimestamps(context, session);
+                    return;
+                } else {
+                    getLogger().error("Failed to list contents of bucket due to {}. Maximum retries reached.", new Object[] {e}, e);
+                    writer.finishListingExceptionally(e);
+                    session.rollback();
+                    context.yield();
+                    refreshRetryCount.set(0);
+                    return;
+                }
+            } else {
+                getLogger().error("Failed to list contents of bucket due to {}", new Object[] {e}, e);
+                writer.finishListingExceptionally(e);
+                session.rollback();
+                context.yield();
+                return;
+            }
+        }
+        catch (final Exception e) {
             getLogger().error("Failed to list contents of bucket due to {}", new Object[] {e}, e);
             writer.finishListingExceptionally(e);
             session.rollback();

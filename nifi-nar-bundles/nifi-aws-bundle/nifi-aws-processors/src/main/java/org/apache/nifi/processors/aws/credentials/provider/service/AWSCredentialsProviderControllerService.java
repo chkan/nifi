@@ -109,6 +109,21 @@ public class AWSCredentialsProviderControllerService extends AbstractControllerS
     }
 
     @Override
+    public void refreshCredentials() throws ProcessException {
+
+    }
+
+    @Override
+    public boolean isTokenExpiringSoon(long secondsThreshold) {
+        return false;
+    }
+
+    @Override
+    public String getSessionToken() {
+        return null;
+    }
+
+    @Override
     protected Collection<ValidationResult> customValidate(final ValidationContext validationContext) {
         return credentialsProviderFactory.validate(validationContext);
     }

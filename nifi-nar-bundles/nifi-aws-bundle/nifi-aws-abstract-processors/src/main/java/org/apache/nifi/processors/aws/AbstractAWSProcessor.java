@@ -16,6 +16,7 @@
  */
 package org.apache.nifi.processors.aws;
 
+import com.amazonaws.AmazonServiceException;
 import com.amazonaws.AmazonWebServiceClient;
 import com.amazonaws.ClientConfiguration;
 import com.amazonaws.Protocol;
@@ -27,6 +28,7 @@ import com.amazonaws.auth.PropertiesCredentials;
 import com.amazonaws.http.conn.ssl.SdkTLSSocketFactory;
 import com.amazonaws.regions.Region;
 import com.amazonaws.regions.Regions;
+import com.amazonaws.services.s3.model.AmazonS3Exception;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.http.conn.ssl.DefaultHostnameVerifier;
 import org.apache.nifi.annotation.lifecycle.OnScheduled;
@@ -36,6 +38,7 @@ import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.components.ValidationContext;
 import org.apache.nifi.components.ValidationResult;
 import org.apache.nifi.context.PropertyContext;
+import org.apache.nifi.controller.ControllerService;
 import org.apache.nifi.expression.ExpressionLanguageScope;
 import org.apache.nifi.processor.AbstractSessionFactoryProcessor;
 import org.apache.nifi.processor.ProcessContext;
@@ -45,6 +48,7 @@ import org.apache.nifi.processor.Relationship;
 import org.apache.nifi.processor.exception.ProcessException;
 import org.apache.nifi.processor.util.StandardValidators;
 import org.apache.nifi.processors.aws.credentials.provider.factory.CredentialPropertyDescriptors;
+import org.apache.nifi.processors.aws.credentials.provider.service.AWSCredentialsProviderService;
 import org.apache.nifi.proxy.ProxyConfiguration;
 import org.apache.nifi.proxy.ProxyConfigurationService;
 import org.apache.nifi.proxy.ProxySpec;
@@ -304,6 +308,21 @@ public abstract class AbstractAWSProcessor<ClientType extends AmazonWebServiceCl
         } catch (final Throwable t) {
             session.rollback(true);
             throw t;
+        }
+    }
+
+    protected void refreshAWSCredentials(ProcessContext context, AmazonServiceException e, ProcessSession session) {
+        getLogger().debug("Caught an AWS Exception, trying to refresh tokens");
+
+        if (e.getStatusCode() == 400 && e.getErrorCode().startsWith("ExpiredToken")) {
+            final AWSCredentialsProviderService service = (AWSCredentialsProviderService) context.getProperty(AbstractAWSCredentialsProviderProcessor.AWS_CREDENTIALS_PROVIDER_SERVICE).asControllerService(AWSCredentialsProviderService.class);
+
+            if (service != null) {
+                getLogger().debug("Refreshing AWS Credentials");
+                service.refreshCredentials();
+                //TODO: Find a way to reinit everything, this doesn't work most likely
+                this.client = createClient(context);
+            }
         }
     }
 

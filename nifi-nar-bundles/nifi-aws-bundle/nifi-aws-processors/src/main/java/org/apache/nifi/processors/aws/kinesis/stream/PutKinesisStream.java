@@ -17,6 +17,7 @@
 package org.apache.nifi.processors.aws.kinesis.stream;
 
 import com.amazonaws.services.kinesis.AmazonKinesisClient;
+import com.amazonaws.services.kinesis.model.AmazonKinesisException;
 import com.amazonaws.services.kinesis.model.PutRecordsRequest;
 import com.amazonaws.services.kinesis.model.PutRecordsRequestEntry;
 import com.amazonaws.services.kinesis.model.PutRecordsResult;
@@ -213,7 +214,16 @@ public class PutKinesisStream extends AbstractKinesisStreamProcessor {
                 getLogger().debug("Successfully published to kinesis records {}", new Object[]{successfulFlowFiles});
             }
 
-        } catch (final Exception exception) {
+        } catch (AmazonKinesisException e) {
+            if (e.getStatusCode() == 400 && e.getErrorCode().startsWith("ExpiredToken")) {
+                getLogger().info("Calling for an AWS Credential Refresh");
+                refreshAWSCredentials(context, e, session);
+            }
+            getLogger().error("Failed to publish due to exception {} flowfiles {} ", new Object[]{e, flowFiles});
+            session.transfer(flowFiles, REL_FAILURE);
+            context.yield();
+        }
+        catch (final Exception exception) {
             getLogger().error("Failed to publish due to exception {} flowfiles {} ", new Object[]{exception, flowFiles});
             session.transfer(flowFiles, REL_FAILURE);
             context.yield();
