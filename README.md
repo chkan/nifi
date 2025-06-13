@@ -107,6 +107,7 @@ Project guides provide extensive documentation for installing and extending the 
 - [User Guide](https://nifi.apache.org/documentation/nifi-latest/html/user-guide.html)
 - [Administrator Guide](https://nifi.apache.org/documentation/nifi-latest/html/administration-guide.html)
 - [Developer Guide](https://nifi.apache.org/documentation/nifi-latest/html/developer-guide.html)
+- [AWS Processor Reference](https://nifi.apache.org/documentation/nifi-latest/html/aws-processors.html)
 
 ## Developing
 

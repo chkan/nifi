@@ -1,0 +1,70 @@
+//
+// Licensed to the Apache Software Foundation (ASF) under one or more
+// contributor license agreements.  See the NOTICE file distributed with
+// this work for additional information regarding copyright ownership.
+// The ASF licenses this file to You under the Apache License, Version 2.0
+// (the "License"); you may not use this file except in compliance with
+// the License.  You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+= AWS Processors
+Apache NiFi Team <dev@nifi.apache.org>
+:homepage: https://nifi.apache.org
+:linkattrs:
+
+This document provides an overview of the Amazon Web Services (AWS) processors distributed with Apache NiFi. These processors are included in the `nifi-aws-bundle` and enable integration with a variety of AWS services.
+
+== Amazon S3
+* ListS3
+* FetchS3Object
+* PutS3Object
+* DeleteS3Object
+* CopyS3Object
+* GetS3ObjectMetadata
+* GetS3ObjectTags
+* TagS3Object
+
+== Amazon Simple Queue Service (SQS)
+* GetSQS
+* PutSQS
+* DeleteSQS
+
+== Amazon Simple Notification Service (SNS)
+* PutSNS
+
+== Amazon Kinesis
+* PutKinesisStream
+* ConsumeKinesisStream
+* PutKinesisFirehose
+
+== Amazon DynamoDB
+* PutDynamoDB
+* PutDynamoDBRecord
+* GetDynamoDB
+* DeleteDynamoDB
+
+== AWS Lambda
+* PutLambda
+
+== Amazon CloudWatch
+* PutCloudWatchMetric
+
+== AWS Machine Learning Services
+Processors for interacting with services such as Amazon Polly, Textract, Transcribe, and Translate.
+* StartAwsPollyJob
+* GetAwsPollyJobStatus
+* StartAwsTextractJob
+* GetAwsTextractJobStatus
+* StartAwsTranscribeJob
+* GetAwsTranscribeJobStatus
+* StartAwsTranslateJob
+* GetAwsTranslateJobStatus
+
+Each processor has additional documentation available under `nifi-aws-bundle` in the `src/main/resources/docs` directory.
