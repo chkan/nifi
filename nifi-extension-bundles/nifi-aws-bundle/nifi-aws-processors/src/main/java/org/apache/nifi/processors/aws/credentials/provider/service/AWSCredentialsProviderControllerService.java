@@ -134,6 +134,17 @@ public class AWSCredentialsProviderControllerService extends AbstractControllerS
         .sensitive(true)
         .build();
 
+    public static final PropertyDescriptor SESSION_TOKEN = new PropertyDescriptor.Builder()
+        .name("Session Token")
+        .displayName("Session Token")
+        .expressionLanguageSupported(ExpressionLanguageScope.ENVIRONMENT)
+        .required(false)
+        .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+        .sensitive(true)
+        .description("AWS STS temporary session token used with Access Key authentication.")
+        .dependsOn(ACCESS_KEY_ID)
+        .build();
+
     public static final PropertyDescriptor USE_ANONYMOUS_CREDENTIALS = new PropertyDescriptor.Builder()
         .name("anonymous-credentials")
         .displayName("Use Anonymous Credentials")
@@ -268,6 +279,7 @@ public class AWSCredentialsProviderControllerService extends AbstractControllerS
         USE_DEFAULT_CREDENTIALS,
         ACCESS_KEY_ID,
         SECRET_KEY,
+        SESSION_TOKEN,
         CREDENTIALS_FILE,
         PROFILE_NAME,
         USE_ANONYMOUS_CREDENTIALS,

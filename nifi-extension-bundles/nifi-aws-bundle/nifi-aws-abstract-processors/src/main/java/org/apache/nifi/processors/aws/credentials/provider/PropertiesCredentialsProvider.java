@@ -21,6 +21,8 @@ import org.apache.nifi.processor.exception.ProcessException;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.AwsCredentials;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.AwsSessionCredentials;
+import org.apache.nifi.util.StringUtils;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -32,6 +34,7 @@ public class PropertiesCredentialsProvider implements AwsCredentialsProvider {
 
     private final String accessKey;
     private final String secretAccessKey;
+    private final String sessionToken;
 
     public PropertiesCredentialsProvider(final File credentialsProperties) {
         try {
@@ -50,6 +53,7 @@ public class PropertiesCredentialsProvider implements AwsCredentialsProvider {
 
                 accessKey = accountProperties.getProperty("accessKey");
                 secretAccessKey = accountProperties.getProperty("secretKey");
+                sessionToken = accountProperties.getProperty("sessionToken");
             }
         } catch (final IOException e) {
             throw new ProcessException("Failed to load AWS credentials properties " + credentialsProperties, e);
@@ -58,6 +62,10 @@ public class PropertiesCredentialsProvider implements AwsCredentialsProvider {
 
     @Override
     public AwsCredentials resolveCredentials() {
-        return AwsBasicCredentials.create(accessKey, secretAccessKey);
+        if (StringUtils.isNotBlank(sessionToken)) {
+            return AwsSessionCredentials.create(accessKey, secretAccessKey, sessionToken);
+        } else {
+            return AwsBasicCredentials.create(accessKey, secretAccessKey);
+        }
     }
 }

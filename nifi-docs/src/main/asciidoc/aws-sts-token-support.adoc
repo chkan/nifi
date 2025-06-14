@@ -1,0 +1,43 @@
+= AWS STS Token Support Proposal
+
+This document outlines the approach to add support for AWS Security Token Service (STS) temporary credentials in the AWS processors shipped with Apache NiFi.
+
+== Background
+
+NiFi 1.28.1 provides a set of processors for interacting with Amazon Web Services. Authentication is configured through the ``AWSCredentialsProviderControllerService`` which currently supports access key/secret key pairs, credentials files, named profiles and Assume Role. Support for supplying an STS session token directly is not available. Several AWS services now require using temporary credentials issued by STS, so NiFi should allow users to provide a session token in addition to access key and secret key.
+
+== Implementation Overview
+
+The following high‑level changes enable STS token support for the S3 and SQS processors (``ListS3``, ``FetchS3Object``, ``PutS3Object``, ``DeleteS3Object``, ``GetSQS``, ``PutSQS`` and ``DeleteSQS``):
+
+. **Add a new property to the credential service**
+
+   *Introduce ``SESSION_TOKEN`` property descriptor in ``AWSCredentialsProviderControllerService`` with environment expression language support and ``sensitive=true``.*
+   This property allows users to supply a temporary session token obtained from AWS STS or another credential provider.
+
+. **Update credential strategy**
+
+   *Extend ``AccessKeyPairCredentialsStrategy`` to build ``BasicSessionCredentials`` (AWS SDK v1) or ``AwsSessionCredentials`` (AWS SDK v2) when ``SESSION_TOKEN`` is provided.*
+   When the token is empty, the strategy continues to create basic credentials as today.
+
+. **Expose the property in the service descriptor list**
+
+   Include ``SESSION_TOKEN`` in ``PROPERTY_DESCRIPTORS`` of ``AWSCredentialsProviderControllerService`` so processors using the controller service automatically receive the new option.
+
+. **Adapt properties file provider (optional)**
+
+   If credential files should also support session tokens, update ``PropertiesCredentialsProvider`` to read an optional ``sessionToken`` entry and construct ``AwsSessionCredentials`` when present.
+
+== Processor Impact
+
+The S3 and SQS processors reference ``AWSCredentialsProviderService`` for authentication; no direct code changes are required in these classes. Once the controller service returns credentials including the session token, the existing AWS clients will use them transparently for requests.
+
+== Documentation Updates
+
+* Update ``aws-processors.adoc`` and the individual processor descriptions under ``nifi-aws-bundle/nifi-aws-processors/src/main/resources/docs`` to mention the new controller service property and show an example flow using STS tokens.
+* Add release notes describing the additional property and that existing flows do not require changes unless they should leverage temporary credentials.
+
+== Testing Considerations
+
+Because the modification touches the credential provider used by both AWS SDK v1 and v2 clients, regression testing should cover S3 and SQS operations with static credentials as well as temporary credentials. Automated unit tests can exercise ``AccessKeyPairCredentialsStrategy`` with and without the session token.
+
