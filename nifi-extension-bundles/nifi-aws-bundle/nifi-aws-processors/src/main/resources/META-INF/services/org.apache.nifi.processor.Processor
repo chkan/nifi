@@ -32,6 +32,7 @@ org.apache.nifi.processors.aws.dynamodb.PutDynamoDBRecord
 org.apache.nifi.processors.aws.dynamodb.DeleteDynamoDB
 org.apache.nifi.processors.aws.kinesis.stream.PutKinesisStream
 org.apache.nifi.processors.aws.kinesis.stream.ConsumeKinesisStream
+org.apache.nifi.processors.aws.kinesis.stream.GetKinesisRecords
 org.apache.nifi.processors.aws.cloudwatch.PutCloudWatchMetric
 org.apache.nifi.processors.aws.ml.translate.StartAwsTranslateJob
 org.apache.nifi.processors.aws.ml.translate.GetAwsTranslateJobStatus
